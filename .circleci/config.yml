@@ -1,0 +1,62 @@
+# Python CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-python/ for more details
+#
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/python:3.7.4
+    working_directory: ~/code
+    steps:
+      - checkout
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "requirements.txt" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+      - run:
+          name: install dependencies
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - save_cache:
+          paths:
+            - venv
+          key: v1-dependencies-{{ checksum "requirements.txt" }}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+  build_image:
+    docker:
+      - image: circleci/python:3.7.4
+    working_directory: ~/code
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          at: ~/code
+      - restore_cache:
+          key: v1-{{ checksum "requirements.txt" }}
+      - run:
+          name: Build Image and push to ECR
+          command: |
+            . venv/bin/activate
+            pip install awscli
+
+            $(aws ecr get-login --no-include-email)
+            docker build -t --CHME APP NAME-- -f web.Dockerfile .
+            docker tag --CHME APP NAME-- :latest $ECR_REPO
+            docker push $ECR_REPO
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - build
+      - build_image:
+          requires:
+            - build
